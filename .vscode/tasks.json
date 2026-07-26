@@ -1,0 +1,42 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build DPI Engine",
+            "type": "process",
+            "command": "C:\\msys64\\ucrt64\\bin\\g++.exe",
+            "args": [
+                "-std=c++17",
+                "-static",
+                "-static-libgcc",
+                "-static-libstdc++",
+                "-pthread",
+                "-O2",
+                "-I",
+                "${workspaceFolder}/include",
+
+                "${workspaceFolder}/src/dpi_mt.cpp",
+                "${workspaceFolder}/src/pcap_reader.cpp",
+                "${workspaceFolder}/src/packet_parser.cpp",
+                "${workspaceFolder}/src/sni_extractor.cpp",
+                "${workspaceFolder}/src/types.cpp",
+
+                "-o",
+                "${workspaceFolder}/dpi_engine.exe"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "PATH": "C:\\msys64\\ucrt64\\bin;C:\\Windows\\system32;C:\\Windows"
+                }
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        }
+    ]
+}

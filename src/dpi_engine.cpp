@@ -168,53 +168,59 @@ bool DPIEngine::processFile(const std::string& input_file,
 }
 
 void DPIEngine::readerThreadFunc(const std::string& input_file) {
-    PacketAnalyzer::PcapReader reader;
-    
-    if (!reader.open(input_file)) {
-        std::cerr << "[Reader] Error: Cannot open input file\n";
-        return;
+    try {
+        PacketAnalyzer::PcapReader reader;
+        
+        if (!reader.open(input_file)) {
+            std::cerr << "[Reader] Error: Cannot open input file\n";
+            return;
+        }
+        
+        // Write PCAP header to output
+        writeOutputHeader(reader.getGlobalHeader());
+        
+        PacketAnalyzer::RawPacket raw;
+        PacketAnalyzer::ParsedPacket parsed;
+        uint32_t packet_id = 0;
+        
+        std::cout << "[Reader] Starting packet processing...\n";
+        
+        while (reader.readNextPacket(raw)) {
+            // Parse the packet
+            if (!PacketAnalyzer::PacketParser::parse(raw, parsed)) {
+                continue;  // Skip unparseable packets
+            }
+            
+            // Only process IP packets with TCP/UDP
+            if (!parsed.has_ip || (!parsed.has_tcp && !parsed.has_udp)) {
+                continue;
+            }
+            
+            // Create packet job
+            PacketJob job = createPacketJob(raw, parsed, packet_id++);
+            
+            // Update global stats
+            stats_.total_packets++;
+            stats_.total_bytes += raw.data.size();
+            
+            if (parsed.has_tcp) {
+                stats_.tcp_packets++;
+            } else if (parsed.has_udp) {
+                stats_.udp_packets++;
+            }
+            
+            // Send to appropriate LB based on hash
+            LoadBalancer& lb = lb_manager_->getLBForPacket(job.tuple);
+            lb.getInputQueue().push(std::move(job));
+        }
+        
+        std::cout << "[Reader] Finished reading " << packet_id << " packets\n";
+        reader.close();
+    } catch (const std::exception& e) {
+        std::cerr << "[Reader] Exception: " << e.what() << "\n";
+    } catch (...) {
+        std::cerr << "[Reader] Unknown exception occurred\n";
     }
-    
-    // Write PCAP header to output
-    writeOutputHeader(reader.getGlobalHeader());
-    
-    PacketAnalyzer::RawPacket raw;
-    PacketAnalyzer::ParsedPacket parsed;
-    uint32_t packet_id = 0;
-    
-    std::cout << "[Reader] Starting packet processing...\n";
-    
-    while (reader.readNextPacket(raw)) {
-        // Parse the packet
-        if (!PacketAnalyzer::PacketParser::parse(raw, parsed)) {
-            continue;  // Skip unparseable packets
-        }
-        
-        // Only process IP packets with TCP/UDP
-        if (!parsed.has_ip || (!parsed.has_tcp && !parsed.has_udp)) {
-            continue;
-        }
-        
-        // Create packet job
-        PacketJob job = createPacketJob(raw, parsed, packet_id++);
-        
-        // Update global stats
-        stats_.total_packets++;
-        stats_.total_bytes += raw.data.size();
-        
-        if (parsed.has_tcp) {
-            stats_.tcp_packets++;
-        } else if (parsed.has_udp) {
-            stats_.udp_packets++;
-        }
-        
-        // Send to appropriate LB based on hash
-        LoadBalancer& lb = lb_manager_->getLBForPacket(job.tuple);
-        lb.getInputQueue().push(std::move(job));
-    }
-    
-    std::cout << "[Reader] Finished reading " << packet_id << " packets\n";
-    reader.close();
 }
 
 PacketJob DPIEngine::createPacketJob(const PacketAnalyzer::RawPacket& raw,
@@ -260,17 +266,17 @@ PacketJob DPIEngine::createPacketJob(const PacketAnalyzer::RawPacket& raw,
     job.ip_offset = 14;  // Ethernet header is 14 bytes
     
     // IP header length
-    if (job.data.size() > 14) {
+    if (job.data.size() >= 34) {  // 14 Eth + 20 min IP
         uint8_t ip_ihl = job.data[14] & 0x0F;
         size_t ip_header_len = ip_ihl * 4;
         job.transport_offset = 14 + ip_header_len;
         
         // Transport header length
-        if (parsed.has_tcp && job.data.size() > job.transport_offset) {
+        if (parsed.has_tcp && job.data.size() >= job.transport_offset + 20) {
             uint8_t tcp_data_offset = (job.data[job.transport_offset + 12] >> 4) & 0x0F;
             size_t tcp_header_len = tcp_data_offset * 4;
             job.payload_offset = job.transport_offset + tcp_header_len;
-        } else if (parsed.has_udp) {
+        } else if (parsed.has_udp && job.data.size() >= job.transport_offset + 8) {
             job.payload_offset = job.transport_offset + 8;  // UDP header is 8 bytes
         }
         
