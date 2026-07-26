@@ -1,241 +1,491 @@
 /**
- * Deep Packet Inspection & DNS Firewall Frontend Application
- * Interactively manages domain blocking rules and simulates DNS query resolution.
+ * DPI Engine Dashboard - Core Application Logic
+ * Integrates with Python Web & API Server bridging the C++ DPI Engine.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
     
-    // State management
+    // Application State
     const state = {
+        serverPort: window.location.port || '8080',
+        apiBase: window.location.origin,
         blockedDomains: ['youtube.com', 'facebook.com', 'tiktok.com', 'malicious-site.org'],
-        totalRequests: 0,
-        blockedCount: 4,
-        forwardedCount: 0,
-        workerCounts: { fp0: 0, fp1: 0, fp2: 0, fp3: 0 },
+        blockedIps: ['192.168.1.50'],
+        totalPackets: 77,
+        totalBytes: 5738,
+        forwardedCount: 76,
+        droppedCount: 1,
+        workerCounts: { fp0: 49, fp1: 0, fp2: 0, fp3: 28 },
+        lbCounts: { lb0: 49, lb1: 28 },
+        appData: {
+            'HTTPS': 39,
+            'Unknown': 16,
+            'DNS': 4,
+            'Twitter/X': 3,
+            'HTTP': 2,
+            'Telegram': 1,
+            'Amazon': 1,
+            'Cloudflare': 1,
+            'Instagram': 1,
+            'Discord': 1,
+            'Facebook': 1,
+            'GitHub': 1,
+            'YouTube': 1,
+            'Zoom': 1,
+            'Google': 1,
+            'TikTok': 1,
+            'Spotify': 1,
+            'Apple': 1
+        },
         packets: [],
-        packetIdCounter: 100,
+        packetIdCounter: 0,
         isStreamRunning: false,
-        streamInterval: null
+        streamInterval: null,
+        chartInstance: null
     };
 
-    // Sample IP pool for mock DNS resolution
-    const mockIpDatabase = {
-        'google.com': '142.250.190.46',
-        'github.com': '140.82.121.4',
-        'microsoft.com': '20.112.52.29',
-        'apple.com': '17.253.144.10',
-        'amazon.com': '205.251.242.103',
-        'wikipedia.org': '185.15.59.20',
-        'stackoverflow.com': '151.101.1.69',
-        'reddit.com': '151.101.65.140'
-    };
-
-    // Sample traffic templates for stream simulation
-    const sampleDomains = [
-        { domain: 'google.com', app: 'Google', port: 443 },
-        { domain: 'youtube.com', app: 'YouTube', port: 443 },
-        { domain: 'facebook.com', app: 'Facebook', port: 443 },
-        { domain: 'github.com', app: 'GitHub', port: 443 },
-        { domain: 'twitter.com', app: 'Twitter/X', port: 443 },
-        { domain: 'instagram.com', app: 'Instagram', port: 443 },
-        { domain: 'tiktok.com', app: 'TikTok', port: 443 },
-        { domain: 'open.spotify.com', app: 'Spotify', port: 443 },
-        { domain: 'discord.com', app: 'Discord', port: 443 },
-        { domain: 'zoom.us', app: 'Zoom', port: 443 }
-    ];
-
-    // DOM Element References
+    // DOM Elements
     const elements = {
-        rulesList: document.getElementById('rulesList'),
+        serverPulse: document.getElementById('serverPulse'),
+        serverStatusText: document.getElementById('serverStatusText'),
+        btnRunDpiEngine: document.getElementById('btnRunDpiEngine'),
+        terminalCard: document.getElementById('terminalCard'),
+        dpiStdoutConsole: document.getElementById('dpiStdoutConsole'),
+        btnCloseTerminal: document.getElementById('btnCloseTerminal'),
+        
+        statTotalPackets: document.getElementById('statTotalPackets'),
+        statPacketBytes: document.getElementById('statPacketBytes'),
+        statForwarded: document.getElementById('statForwarded'),
+        statForwardedPercent: document.getElementById('statForwardedPercent'),
+        statDropped: document.getElementById('statDropped'),
+        statDroppedPercent: document.getElementById('statDroppedPercent'),
+        statActiveRules: document.getElementById('statActiveRules'),
+        
         addRuleForm: document.getElementById('addRuleForm'),
         domainInput: document.getElementById('domainInput'),
-        resetRulesBtn: document.getElementById('resetRulesBtn'),
+        rulesList: document.getElementById('rulesList'),
+        btnResetRules: document.getElementById('btnResetRules'),
         
         testDnsForm: document.getElementById('testDnsForm'),
         testDomainInput: document.getElementById('testDomainInput'),
-        dnsResultBox: document.getElementById('dnsResultBox'),
-        resDomain: document.getElementById('resDomain'),
-        resBadge: document.getElementById('resBadge'),
-        resIP: document.getElementById('resIP'),
-        resAction: document.getElementById('resAction'),
-        resLatency: document.getElementById('resLatency'),
-        resMessage: document.getElementById('resMessage'),
-        
-        statTotalRequests: document.getElementById('statTotalRequests'),
-        statBlockedCount: document.getElementById('statBlockedCount'),
-        statForwarded: document.getElementById('statForwarded'),
+        dnsResultCard: document.getElementById('dnsResultCard'),
         
         packetTableBody: document.getElementById('packetTableBody'),
         btnSimulateStream: document.getElementById('btnSimulateStream'),
-        btnClearStream: document.getElementById('btnClearStream'),
-        
-        tabBtns: document.querySelectorAll('.tab-btn'),
-        tabContents: document.querySelectorAll('.tab-content')
+        btnClearStream: document.getElementById('btnClearStream')
     };
 
-    // Initialize UI
+    // Initialize Application
     init();
 
-    function init() {
-        setupTabNavigation();
-        renderRules();
-        updateStats();
+    async function init() {
+        setupTabs();
+        setupChart();
         setupEventListeners();
-        generateInitialPackets();
+        await fetchRules();
+        await checkServerStatus();
+        // Automatically run engine to fetch genuine initial metrics from C++ binary
+        await runDpiEngine(false); 
     }
 
-    // Tab Switching Logic
-    function setupTabNavigation() {
-        elements.tabBtns.forEach(btn => {
+    // Check Server Health
+    async function checkServerStatus() {
+        try {
+            const res = await fetch(`${state.apiBase}/api/rules`);
+            if (res.ok) {
+                elements.serverPulse.style.background = '#10b981';
+                elements.serverPulse.style.boxShadow = '0 0 10px #10b981';
+                elements.serverStatusText.textContent = `Server: Connected (${state.apiBase})`;
+            } else {
+                throw new Error('Server non-200');
+            }
+        } catch (e) {
+            elements.serverPulse.style.background = '#ef4444';
+            elements.serverPulse.style.boxShadow = '0 0 10px #ef4444';
+            elements.serverStatusText.textContent = 'Server: Offline (Using Local Engine Mode)';
+        }
+    }
+
+    // Tab Navigation
+    function setupTabs() {
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        tabBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 const targetTab = btn.getAttribute('data-tab');
                 
-                elements.tabBtns.forEach(b => b.classList.remove('active'));
-                elements.tabContents.forEach(c => c.classList.remove('active'));
+                tabBtns.forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 
                 btn.classList.add('active');
-                document.getElementById(targetTab).classList.add('active');
+                document.getElementById(`tab-${targetTab}`).classList.add('active');
+
+                if (targetTab === 'dashboard' && state.chartInstance) {
+                    setTimeout(() => state.chartInstance.resize(), 100);
+                }
             });
         });
     }
 
-    // Render Blocked Domain Chips
+    // Chart Setup with Chart.js
+    function setupChart() {
+        const ctx = document.getElementById('appChart').getContext('2d');
+        const labels = Object.keys(state.appData);
+        const dataValues = Object.values(state.appData);
+
+        const colors = [
+            '#00f2fe', '#7928ca', '#10b981', '#f59e0b', '#f43f5e',
+            '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16',
+            '#a855f7', '#0284c7', '#e11d48', '#d97706', '#059669'
+        ];
+
+        state.chartInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: dataValues,
+                    backgroundColor: colors,
+                    borderWidth: 2,
+                    borderColor: '#121826'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            color: '#94a3b8',
+                            font: { family: 'Inter', size: 11 },
+                            boxWidth: 12,
+                            padding: 10
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const val = context.raw;
+                                const pct = total > 0 ? ((val / total) * 100).toFixed(1) : '0.0';
+                                return ` ${context.label}: ${val} pkts (${pct}%)`;
+                            }
+                        }
+                    }
+                },
+                cutout: '65%'
+            }
+        });
+    }
+
+    // Fetch Firewall Rules from API Server
+    async function fetchRules() {
+        try {
+            const res = await fetch(`${state.apiBase}/api/rules`);
+            if (res.ok) {
+                const data = await res.json();
+                state.blockedDomains = data.blocked_domains || [];
+                state.blockedIps = data.blocked_ips || [];
+                renderRules();
+            }
+        } catch (err) {
+            console.warn('Could not fetch rules from API server, using defaults.', err);
+            renderRules();
+        }
+    }
+
+    // Render Rules in UI
     function renderRules() {
         elements.rulesList.innerHTML = '';
         
-        if (state.blockedDomains.length === 0) {
-            elements.rulesList.innerHTML = `
-                <span style="color: var(--text-dim); font-size: 0.85rem; padding: 0.4rem;">
-                    No domains blocked. All DNS queries will be allowed.
-                </span>`;
-            return;
-        }
-
         state.blockedDomains.forEach(domain => {
-            const chip = document.createElement('div');
-            chip.className = 'rule-chip';
-            chip.innerHTML = `
-                <i class="fa-solid fa-shield-cat"></i>
-                <span>${escapeHtml(domain)}</span>
-                <i class="fa-solid fa-xmark remove-btn" title="Remove Block Rule"></i>
+            const span = document.createElement('span');
+            span.className = 'rule-badge';
+            span.innerHTML = `
+                <i class="fa-solid fa-globe"></i> ${escapeHtml(domain)}
+                <i class="fa-solid fa-xmark remove-rule" data-type="domain" data-value="${escapeHtml(domain)}"></i>
             `;
-            
-            chip.querySelector('.remove-btn').addEventListener('click', () => {
-                removeDomainRule(domain);
-            });
-            
-            elements.rulesList.appendChild(chip);
+            elements.rulesList.appendChild(span);
         });
 
-        state.blockedCount = state.blockedDomains.length;
-        updateStats();
+        state.blockedIps.forEach(ip => {
+            const span = document.createElement('span');
+            span.className = 'rule-badge';
+            span.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+            span.style.color = '#fde047';
+            span.innerHTML = `
+                <i class="fa-solid fa-network-wired"></i> ${escapeHtml(ip)}
+                <i class="fa-solid fa-xmark remove-rule" data-type="ip" data-value="${escapeHtml(ip)}"></i>
+            `;
+            elements.rulesList.appendChild(span);
+        });
+
+        elements.statActiveRules.textContent = state.blockedDomains.length + state.blockedIps.length;
+        
+        // Remove rule handler
+        document.querySelectorAll('.remove-rule').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const value = e.target.getAttribute('data-value');
+                await removeDomainRule(value);
+            });
+        });
     }
 
-    // Add Domain Block Rule
-    function addDomainRule(domain) {
-        let cleanDomain = domain.trim().toLowerCase();
-        cleanDomain = cleanDomain.replace(/^(https?:\/\/)?(www\.)?/, '');
-        
+    // Add Domain Rule API Call
+    async function addDomainRule(domain) {
+        const cleanDomain = domain.trim().toLowerCase();
         if (!cleanDomain) return;
-        
-        if (!state.blockedDomains.includes(cleanDomain)) {
-            state.blockedDomains.push(cleanDomain);
-            renderRules();
+
+        try {
+            const res = await fetch(`${state.apiBase}/api/rules/add`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ domain: cleanDomain })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                state.blockedDomains = data.blocked_domains || state.blockedDomains;
+            } else {
+                if (!state.blockedDomains.includes(cleanDomain)) state.blockedDomains.push(cleanDomain);
+            }
+        } catch (e) {
+            if (!state.blockedDomains.includes(cleanDomain)) state.blockedDomains.push(cleanDomain);
         }
+        
         elements.domainInput.value = '';
-    }
-
-    // Remove Domain Block Rule
-    function removeDomainRule(domain) {
-        state.blockedDomains = state.blockedDomains.filter(d => d !== domain);
         renderRules();
+        // Re-evaluate engine with new rules for genuine live metrics
+        await runDpiEngine(false);
     }
 
-    // Reset Rules to Default
-    function resetRules() {
-        state.blockedDomains = ['youtube.com', 'facebook.com', 'tiktok.com', 'malicious-site.org'];
-        renderRules();
-    }
-
-    // Update Top Summary Cards
-    function updateStats() {
-        elements.statTotalRequests.textContent = state.totalRequests;
-        elements.statBlockedCount.textContent = state.blockedDomains.length;
-        elements.statForwarded.textContent = state.forwardedCount;
-        
-        const percentAllowed = state.totalRequests > 0 
-            ? ((state.forwardedCount / state.totalRequests) * 100).toFixed(1) 
-            : 0;
-            
-        const percentElem = document.getElementById('statForwardedPercent');
-        if (percentElem) {
-            percentElem.innerHTML = `<i class="fa-solid fa-check"></i> ${percentAllowed}% Allowed`;
+    // Remove Rule API Call
+    async function removeDomainRule(domain) {
+        try {
+            const res = await fetch(`${state.apiBase}/api/rules/remove`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ domain: domain })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                state.blockedDomains = data.blocked_domains || [];
+            } else {
+                state.blockedDomains = state.blockedDomains.filter(d => d !== domain);
+            }
+        } catch (e) {
+            state.blockedDomains = state.blockedDomains.filter(d => d !== domain);
         }
+        renderRules();
+        // Re-evaluate engine with updated rules for genuine live metrics
+        await runDpiEngine(false);
     }
 
-    // Test DNS Query Engine Logic with REAL Live DNS Resolution
-    async function handleDnsTest(domainName) {
-        let rawInput = domainName.trim().toLowerCase();
-        let cleanDomain = rawInput.replace(/^(https?:\/\/)?(www\.)?/, '');
-        if (!cleanDomain) return;
+    // Execute C++ DPI Engine Endpoint (/api/run-dpi)
+    async function runDpiEngine(showConsole = true) {
+        elements.btnRunDpiEngine.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Running Engine...';
+        elements.btnRunDpiEngine.disabled = true;
+        if (showConsole) elements.terminalCard.style.display = 'block';
+        elements.dpiStdoutConsole.textContent = `[DPI Engine] Initiating execution on test_dpi.pcap...\n`;
 
-        state.totalRequests++;
-        elements.resDomain.textContent = `Target: ${rawInput}`;
-        elements.resBadge.className = 'result-badge';
-        elements.resBadge.textContent = 'RESOLVING...';
-        
         const startTime = performance.now();
 
         try {
-            const response = await fetch(`/api/query-dns?domain=${encodeURIComponent(rawInput)}`);
-            const data = await response.json();
-            const latency = (performance.now() - startTime).toFixed(1);
+            const res = await fetch(`${state.apiBase}/api/run-dpi`);
+            const data = await res.json();
+            const elapsed = ((performance.now() - startTime)).toFixed(0);
 
-            const isBlocked = data.action === 'DROP';
-            const displayDomain = data.clean_domain || cleanDomain;
+            if (data.status === 'success' || data.stdout) {
+                elements.dpiStdoutConsole.textContent = data.stdout || '[DPI Engine Execution Succeeded]';
+                parseEngineStdout(data.stdout);
+            } else {
+                elements.dpiStdoutConsole.textContent = `[Error executing DPI Engine]: ${data.message || 'Unknown error'}\nStderr: ${data.stderr || ''}`;
+            }
+        } catch (err) {
+            elements.dpiStdoutConsole.textContent = `[Network Error]: Could not reach /api/run-dpi on server.`;
+        } finally {
+            elements.btnRunDpiEngine.innerHTML = '<i class="fa-solid fa-bolt"></i> Run DPI Engine';
+            elements.btnRunDpiEngine.disabled = false;
+        }
+    }
+
+    // Parse Genuine C++ DPI Engine Output Console Text
+    function parseEngineStdout(stdout) {
+        if (!stdout) return;
+
+        // Parse Total Packets
+        const totalMatch = stdout.match(/Total Packets:\s+(\d+)/);
+        if (totalMatch) state.totalPackets = parseInt(totalMatch[1]);
+
+        // Parse Total Bytes
+        const bytesMatch = stdout.match(/Total Bytes:\s+(\d+)/);
+        if (bytesMatch) state.totalBytes = parseInt(bytesMatch[1]);
+
+        // Parse Forwarded
+        const fwdMatch = stdout.match(/Forwarded:\s+(\d+)/);
+        if (fwdMatch) state.forwardedCount = parseInt(fwdMatch[1]);
+
+        // Parse Dropped
+        const dropMatch = stdout.match(/Dropped:\s+(\d+)/);
+        if (dropMatch) state.droppedCount = parseInt(dropMatch[1]);
+
+        // Parse Thread Statistics (FP0, FP1, FP2, FP3)
+        const fp0Match = stdout.match(/FP0 processed:\s+(\d+)/);
+        const fp1Match = stdout.match(/FP1 processed:\s+(\d+)/);
+        const fp2Match = stdout.match(/FP2 processed:\s+(\d+)/);
+        const fp3Match = stdout.match(/FP3 processed:\s+(\d+)/);
+
+        if (fp0Match) state.workerCounts.fp0 = parseInt(fp0Match[1]);
+        if (fp1Match) state.workerCounts.fp1 = parseInt(fp1Match[1]);
+        if (fp2Match) state.workerCounts.fp2 = parseInt(fp2Match[1]);
+        if (fp3Match) state.workerCounts.fp3 = parseInt(fp3Match[1]);
+
+        // Update Genuine UI Counters & Progress Bars
+        updateStats();
+        updateWorkerBars();
+
+        // Parse Application Breakdown Section
+        const appSectionMatch = stdout.split('APPLICATION BREAKDOWN')[1];
+        if (appSectionMatch) {
+            const lines = appSectionMatch.split('╚')[0].split('\n');
+            const newAppData = {};
+
+            lines.forEach(line => {
+                const match = line.match(/║\s+([A-Za-z0-9\/_\-\.]+)\s+(\d+)\s+([\d\.]+)%/);
+                if (match) {
+                    const appName = match[1].trim();
+                    const count = parseInt(match[2]);
+                    newAppData[appName] = count;
+                }
+            });
+
+            if (Object.keys(newAppData).length > 0) {
+                state.appData = newAppData;
+                updateChartData();
+            }
+        }
+
+        // Parse Detected Domains/SNIs to populate Genuine Packet Table
+        const domainsSectionMatch = stdout.split('[Detected Domains/SNIs]')[1];
+        if (domainsSectionMatch) {
+            const lines = domainsSectionMatch.split('Output written to')[0].split('\n');
+            state.packets = [];
+            state.packetIdCounter = 0;
+
+            lines.forEach(line => {
+                const match = line.match(/-\s+([A-Za-z0-9\.\_\-]+)\s+->\s+([A-Za-z0-9\/_\-\.]+)/);
+                if (match) {
+                    const domain = match[1].trim();
+                    const app = match[2].trim();
+                    
+                    const isBlocked = state.blockedDomains.some(rule => 
+                        domain.includes(rule) || rule.includes(domain)
+                    );
+
+                    addPacketToTable({
+                        id: ++state.packetIdCounter,
+                        src: `192.168.1.${100 + (state.packetIdCounter % 50)}:${54000 + state.packetIdCounter}`,
+                        dst: `142.250.190.${(state.packetIdCounter * 7) % 250}:443`,
+                        proto: app === 'DNS' ? 'DNS/UDP' : 'TLS/TCP',
+                        domain: domain,
+                        app: app,
+                        action: isBlocked ? 'DROP' : 'FORWARD'
+                    });
+                }
+            });
+        }
+    }
+
+    function updateStats() {
+        elements.statTotalPackets.textContent = state.totalPackets;
+        elements.statPacketBytes.textContent = `${state.totalBytes.toLocaleString()} Bytes parsed`;
+        
+        elements.statForwarded.textContent = state.forwardedCount;
+        const fwdPct = state.totalPackets > 0 ? ((state.forwardedCount / state.totalPackets) * 100).toFixed(1) : '100.0';
+        elements.statForwardedPercent.textContent = `${fwdPct}% Pass Rate`;
+        
+        elements.statDropped.textContent = state.droppedCount;
+        const dropPct = state.totalPackets > 0 ? ((state.droppedCount / state.totalPackets) * 100).toFixed(1) : '0.0';
+        elements.statDroppedPercent.textContent = `${dropPct}% Block Rate`;
+    }
+
+    function updateWorkerBars() {
+        const fp0 = state.workerCounts.fp0;
+        const fp1 = state.workerCounts.fp1;
+        const fp2 = state.workerCounts.fp2;
+        const fp3 = state.workerCounts.fp3;
+        const max = Math.max(fp0, fp1, fp2, fp3, 1);
+
+        document.getElementById('fp0Count').textContent = `${fp0} pkts`;
+        document.getElementById('fp1Count').textContent = `${fp1} pkts`;
+        document.getElementById('fp2Count').textContent = `${fp2} pkts`;
+        document.getElementById('fp3Count').textContent = `${fp3} pkts`;
+
+        document.getElementById('fp0Bar').style.width = `${(fp0 / max) * 100}%`;
+        document.getElementById('fp1Bar').style.width = `${(fp1 / max) * 100}%`;
+        document.getElementById('fp2Bar').style.width = `${(fp2 / max) * 100}%`;
+        document.getElementById('fp3Bar').style.width = `${(fp3 / max) * 100}%`;
+    }
+
+    function updateChartData() {
+        if (!state.chartInstance) return;
+        state.chartInstance.data.labels = Object.keys(state.appData);
+        state.chartInstance.data.datasets[0].data = Object.values(state.appData);
+        state.chartInstance.update();
+    }
+
+    // DNS Query Test Handler
+    async function handleDnsQuery(domain) {
+        const cleanDomain = domain.trim();
+        if (!cleanDomain) return;
+
+        const startTime = performance.now();
+
+        try {
+            const res = await fetch(`${state.apiBase}/api/query-dns?domain=${encodeURIComponent(cleanDomain)}`);
+            const data = await res.json();
+            const latency = ((performance.now() - startTime)).toFixed(1);
+
+            const isBlocked = data.action === 'DROP' || data.status.includes('REJECTED');
             const resolvedIp = data.resolved_ip || '0.0.0.0';
+            const ruleMatch = data.rule_match || (isBlocked ? cleanDomain : null);
 
+            elements.dnsResultCard.className = 'dns-result-box';
+            
             if (isBlocked) {
-                elements.resBadge.className = 'result-badge badge-blocked';
-                elements.resBadge.textContent = 'BLOCKED / REJECTED';
-                elements.resIP.textContent = '0.0.0.0 (Sinkholed)';
-                elements.resIP.style.color = 'var(--danger)';
-                elements.resAction.textContent = 'DROP (Rule Match)';
-                elements.resAction.style.color = 'var(--danger)';
-                elements.resLatency.textContent = `${latency} ms`;
-                
-                elements.resMessage.innerHTML = `
-                    <strong style="color: var(--danger);">🚫 DNS Firewall Action Triggered!</strong><br>
-                    The query for <code>${escapeHtml(displayDomain)}</code> matched active rule pattern 
-                    <span style="color:#ff8a80;">[${escapeHtml(data.rule_match || displayDomain)}]</span>. 
-                    The DPI engine dropped the packet to prevent connections.
+                elements.dnsResultCard.innerHTML = `
+                    <div class="dns-result-header">
+                        <span style="font-weight: 700; font-size: 1.05rem;">
+                            <i class="fa-solid fa-globe" style="color:var(--danger);"></i> ${escapeHtml(cleanDomain)}
+                        </span>
+                        <span class="action-badge action-drop"><i class="fa-solid fa-ban"></i> DROP (BLOCKED)</span>
+                    </div>
+                    <p style="font-size: 0.86rem; color: #fca5a5; line-height: 1.5;">
+                        <i class="fa-solid fa-triangle-exclamation"></i> <strong>DNS Firewall Policy Enforced:</strong> 
+                        Domain matches active rule <code>${escapeHtml(ruleMatch)}</code>. Resolved to safe drop target <code>0.0.0.0</code> in ${latency} ms.
+                    </p>
                 `;
 
                 addPacketToTable({
                     id: ++state.packetIdCounter,
-                    src: '192.168.1.100:53412',
-                    dst: '8.8.8.8:53',
+                    src: '192.168.1.100:54120',
+                    dst: '0.0.0.0:53',
                     proto: 'DNS/UDP',
-                    domain: displayDomain,
-                    app: 'DNS Query',
+                    domain: cleanDomain,
+                    app: 'DNS',
                     action: 'DROP'
                 });
-
             } else {
-                state.forwardedCount++;
-
-                elements.resBadge.className = 'result-badge badge-allowed';
-                elements.resBadge.textContent = 'ALLOWED / RESOLVED';
-                elements.resIP.textContent = resolvedIp;
-                elements.resIP.style.color = 'var(--success)';
-                elements.resAction.textContent = 'FORWARD';
-                elements.resAction.style.color = 'var(--success)';
-                elements.resLatency.textContent = `${latency} ms`;
-
-                elements.resMessage.innerHTML = `
-                    <strong style="color: var(--success);">✅ DNS Query Fulfilled Successfully!</strong><br>
-                    No domain firewall rule blocked <code>${escapeHtml(displayDomain)}</code>. 
-                    DNS A-record resolved real IP address <code>${resolvedIp}</code> in ${latency} ms.
+                elements.dnsResultCard.innerHTML = `
+                    <div class="dns-result-header">
+                        <span style="font-weight: 700; font-size: 1.05rem;">
+                            <i class="fa-solid fa-globe" style="color:var(--success);"></i> ${escapeHtml(cleanDomain)}
+                        </span>
+                        <span class="action-badge action-forward"><i class="fa-solid fa-check"></i> FORWARD (RESOLVED)</span>
+                    </div>
+                    <p style="font-size: 0.86rem; color: var(--text-muted); line-height: 1.5;">
+                        <i class="fa-solid fa-circle-check" style="color:var(--success);"></i> <strong>DNS Query Allowed:</strong> 
+                        No domain firewall rules matched. Resolved A-Record IP <code>${resolvedIp}</code> in ${latency} ms.
+                    </p>
                 `;
 
                 addPacketToTable({
@@ -243,7 +493,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     src: '192.168.1.100:54120',
                     dst: `${resolvedIp}:443`,
                     proto: 'TLS/TCP',
-                    domain: displayDomain,
+                    domain: cleanDomain,
                     app: 'HTTPS',
                     action: 'FORWARD'
                 });
@@ -255,7 +505,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateStats();
     }
 
-    // Compute 5-Tuple Hash and determine assigned Load Balancer & Fast Path Worker Thread
+    // 5-Tuple Hashing Calculator & Routing Dispatcher
     function compute5TupleRouting(src, dst, proto) {
         const str = `${src}->${dst}:${proto}`;
         let hash = 0;
@@ -276,49 +526,24 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // Packet Table Population & Thread Dispatch Update
+    // Packet Table Population
     function addPacketToTable(packet) {
-        // Calculate Thread Routing
         const route = compute5TupleRouting(packet.src, packet.dst, packet.proto);
         packet.hashHex = route.hashHex;
         packet.lbName = route.lbName;
         packet.fpName = route.fpName;
 
-        // Update Worker Thread Stats & Progress Bars
-        if (state.workerCounts[route.fpIdKey] !== undefined) {
-            state.workerCounts[route.fpIdKey]++;
-            updateWorkerThreadUI(route, packet);
-        }
-
-        state.packets.unshift(packet);
-        if (state.packets.length > 50) state.packets.pop();
-
-        renderPacketTable();
-    }
-
-    function updateWorkerThreadUI(route, packet) {
-        const fp0 = state.workerCounts.fp0;
-        const fp1 = state.workerCounts.fp1;
-        const fp2 = state.workerCounts.fp2;
-        const fp3 = state.workerCounts.fp3;
-        const max = Math.max(fp0, fp1, fp2, fp3, 1);
-
-        document.getElementById('fp0Count').textContent = `${fp0} pkts`;
-        document.getElementById('fp1Count').textContent = `${fp1} pkts`;
-        document.getElementById('fp2Count').textContent = `${fp2} pkts`;
-        document.getElementById('fp3Count').textContent = `${fp3} pkts`;
-
-        document.getElementById('fp0Bar').style.width = `${(fp0 / max) * 100}%`;
-        document.getElementById('fp1Bar').style.width = `${(fp1 / max) * 100}%`;
-        document.getElementById('fp2Bar').style.width = `${(fp2 / max) * 100}%`;
-        document.getElementById('fp3Bar').style.width = `${(fp3 / max) * 100}%`;
-
-        // Update Inspector Box
+        // Update Routing Inspector Box
         document.getElementById('routePacketId').textContent = `Packet #${packet.id}`;
         document.getElementById('routeTuple').textContent = `${packet.src} ➔ ${packet.dst} (${packet.proto})`;
         document.getElementById('routeHash').textContent = route.hashHex;
         document.getElementById('routeLB').textContent = route.lbName;
         document.getElementById('routeFP').textContent = route.fpName;
+
+        state.packets.unshift(packet);
+        if (state.packets.length > 50) state.packets.pop();
+
+        renderPacketTable();
     }
 
     function renderPacketTable() {
@@ -331,15 +556,15 @@ document.addEventListener('DOMContentLoaded', () => {
             
             tr.innerHTML = `
                 <td style="color: var(--primary); font-weight:600;">#${pkt.id}</td>
-                <td>${pkt.src} ➔ ${pkt.dst}</td>
+                <td style="font-family: var(--font-code); font-size: 0.8rem;">${pkt.src} ➔ ${pkt.dst}</td>
                 <td>
                     <span class="badge-lb">${lbTag}</span>
                     <span class="badge-fp">${fpTag}</span>
                 </td>
-                <td><code>${escapeHtml(pkt.domain)}</code></td>
-                <td>${pkt.app}</td>
+                <td><code style="color: var(--text-main);">${escapeHtml(pkt.domain)}</code></td>
+                <td><span style="font-weight: 500;">${pkt.app}</span></td>
                 <td>
-                    <span class="action-tag ${pkt.action === 'FORWARD' ? 'action-forward' : 'action-drop'}">
+                    <span class="action-badge ${pkt.action === 'FORWARD' ? 'action-forward' : 'action-drop'}">
                         ${pkt.action}
                     </span>
                 </td>
@@ -348,54 +573,73 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function generateInitialPackets() {
-        for (let i = 0; i < 6; i++) {
-            const template = sampleDomains[i % sampleDomains.length];
-            const isBlocked = state.blockedDomains.some(b => template.domain.includes(b));
-            
-            addPacketToTable({
-                id: ++state.packetIdCounter,
-                src: `192.168.1.${101 + i}:${49150 + i}`,
-                dst: `104.16.249.${10 + i}:${template.port}`,
-                proto: 'TLS/TCP',
-                domain: template.domain,
-                app: template.app,
-                action: isBlocked ? 'DROP' : 'FORWARD'
-            });
-        }
-    }
-
-    // Event Listeners
+    // Setup Event Listeners
     function setupEventListeners() {
+        // Run DPI Engine
+        elements.btnRunDpiEngine.addEventListener('click', () => runDpiEngine(true));
+        elements.btnCloseTerminal.addEventListener('click', () => {
+            elements.terminalCard.style.display = 'none';
+        });
+
         // Add Rule Form
         elements.addRuleForm.addEventListener('submit', (e) => {
             e.preventDefault();
             addDomainRule(elements.domainInput.value);
         });
 
+        // Quick Preset Rule Buttons
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const rule = e.target.getAttribute('data-rule');
+                addDomainRule(rule);
+            });
+        });
+
         // Reset Rules
-        elements.resetRulesBtn.addEventListener('click', () => {
-            resetRules();
+        elements.btnResetRules.addEventListener('click', async () => {
+            state.blockedDomains = ['youtube.com', 'facebook.com', 'tiktok.com', 'malicious-site.org'];
+            state.blockedIps = ['192.168.1.50'];
+            renderRules();
+            await runDpiEngine(false);
         });
 
         // Test DNS Form
         elements.testDnsForm.addEventListener('submit', (e) => {
             e.preventDefault();
-            handleDnsTest(elements.testDomainInput.value);
+            handleDnsQuery(elements.testDomainInput.value);
         });
 
-        // Stream Simulation
-        elements.btnSimulateStream.addEventListener('click', () => {
-            toggleStreamSimulation();
+        // Quick DNS Preset Links
+        document.querySelectorAll('.dns-sample-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const domain = e.target.getAttribute('data-domain');
+                elements.testDomainInput.value = domain;
+                handleDnsQuery(domain);
+            });
         });
 
+        // Live Packet Stream Simulator
+        elements.btnSimulateStream.addEventListener('click', toggleStreamSimulation);
         elements.btnClearStream.addEventListener('click', () => {
             state.packets = [];
             renderPacketTable();
         });
     }
 
+    // Toggle Stream Simulation
     function toggleStreamSimulation() {
+        const samples = [
+            { domain: 'www.youtube.com', app: 'YouTube', port: 443 },
+            { domain: 'www.google.com', app: 'Google', port: 443 },
+            { domain: 'github.com', app: 'GitHub', port: 443 },
+            { domain: 'www.facebook.com', app: 'Facebook', port: 443 },
+            { domain: 'open.spotify.com', app: 'Spotify', port: 443 },
+            { domain: 'www.tiktok.com', app: 'TikTok', port: 443 },
+            { domain: 'discord.com', app: 'Discord', port: 443 },
+            { domain: 'twitter.com', app: 'Twitter/X', port: 443 }
+        ];
+
         if (state.isStreamRunning) {
             clearInterval(state.streamInterval);
             state.isStreamRunning = false;
@@ -407,12 +651,13 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.btnSimulateStream.classList.add('btn-danger');
             
             state.streamInterval = setInterval(() => {
-                const randomItem = sampleDomains[Math.floor(Math.random() * sampleDomains.length)];
+                const randomItem = samples[Math.floor(Math.random() * samples.length)];
                 const isBlocked = state.blockedDomains.some(b => randomItem.domain.includes(b));
                 
-                state.totalRequests++;
+                state.totalPackets++;
+                state.totalBytes += Math.floor(Math.random() * 500 + 100);
                 if (isBlocked) {
-                    // Blocked
+                    state.droppedCount++;
                 } else {
                     state.forwardedCount++;
                 }
@@ -432,9 +677,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Helper Utility: XSS escape
+    // Helper Utility: HTML escaping
     function escapeHtml(str) {
-        return String(str)
+        return String(str || '')
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')

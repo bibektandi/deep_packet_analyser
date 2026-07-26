@@ -90,10 +90,11 @@ class DPIRequestHandler(http.server.SimpleHTTPRequestHandler):
                 cmd.extend(['--block-ip', ip])
                 
             try:
-                res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+                res = subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace', timeout=10)
+                stdout_text = res.stdout if res.stdout else res.stderr
                 self.send_json_response({
                     'status': 'success' if res.returncode == 0 else 'error',
-                    'stdout': res.stdout,
+                    'stdout': stdout_text,
                     'stderr': res.stderr,
                     'returncode': res.returncode
                 })

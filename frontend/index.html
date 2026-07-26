@@ -3,262 +3,302 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Deep Packet Inspection (DPI) & DNS Firewall Dashboard for Computer Network Traffic Analysis and Domain Blocking">
-    <title>Deep Packet Inspector & DNS Firewall Dashboard</title>
+    <title>DPI Engine - Deep Packet Inspection & DNS Firewall Dashboard</title>
     
-    <!-- FontAwesome for Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- Chart.js for Application & Thread Data Visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
     <!-- Custom CSS -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-    <div class="app-container">
-        
-        <!-- Header Navbar -->
-        <header class="navbar">
-            <div class="brand">
-                <div class="brand-icon">
-                    <i class="fa-solid fa-shield-halved"></i>
-                </div>
-                <div class="brand-text">
-                    <h1>DPI Engine & DNS Firewall</h1>
-                    <p>C++ Multi-Threaded Packet Inspector v2.0</p>
-                </div>
+    <!-- Top Navigation Bar -->
+    <header class="navbar">
+        <div class="nav-brand">
+            <div class="brand-logo">
+                <i class="fa-solid fa-shield-halved"></i>
             </div>
-            
-            <div class="nav-status">
-                <div class="status-badge" id="backendStatus">
-                    <div class="pulse-dot"></div>
-                    <span id="statusText">System Active (C++ Engine Ready)</span>
-                </div>
+            <div>
+                <h1 class="brand-title">DPI Engine <span class="badge-v2">v2.0 MT</span></h1>
+                <p class="brand-subtitle">Deep Packet Inspection & Multi-Threaded DNS Firewall</p>
             </div>
-        </header>
+        </div>
 
-        <!-- Navigation Tabs -->
-        <nav class="tab-navigation" role="tablist">
-            <button class="tab-btn active" data-tab="tab-dns" role="tab">
-                <i class="fa-solid fa-network-wired"></i> DNS Query & Domain Firewall
-            </button>
-            <button class="tab-btn" data-tab="tab-packets" role="tab">
-                <i class="fa-solid fa-layer-group"></i> Live DPI Packet Inspector
-            </button>
-            <button class="tab-btn" data-tab="tab-learn" role="tab">
-                <i class="fa-solid fa-graduation-cap"></i> Network Architecture & Learning
-            </button>
-        </nav>
+        <div class="nav-status">
+            <div class="status-indicator">
+                <span class="pulse-dot" id="serverPulse"></span>
+                <span id="serverStatusText">Server: Connecting...</span>
+            </div>
 
-        <!-- TAB 1: DNS Query & Domain Firewall -->
-        <section id="tab-dns" class="tab-content active">
+            <div class="status-indicator secondary">
+                <i class="fa-solid fa-microchip" style="color: var(--primary);"></i>
+                <span id="threadsStatusText">Threads: 2 LB / 4 FP</span>
+            </div>
+
+            <button id="btnRunDpiEngine" class="btn btn-primary">
+                <i class="fa-solid fa-bolt"></i> Run DPI Engine
+            </button>
+        </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="dashboard">
+            <i class="fa-solid fa-chart-pie"></i> Control Dashboard
+        </button>
+        <button class="tab-btn" data-tab="packets">
+            <i class="fa-solid fa-list-check"></i> Live Packet Feed
+        </button>
+        <button class="tab-btn" data-tab="learn">
+            <i class="fa-solid fa-network-wired"></i> Pipeline Architecture
+        </button>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="container">
+
+        <!-- TAB 1: Main Control Dashboard -->
+        <section id="tab-dashboard" class="tab-content active">
             
-            <!-- Quick Stats Summary -->
+            <!-- Quick Summary KPI Stats Cards -->
             <div class="stats-grid">
                 <div class="stat-card">
-                    <span class="stat-title">Total DNS Requests</span>
-                    <span class="stat-value" id="statTotalRequests">142</span>
-                    <span class="stat-trend trend-up"><i class="fa-solid fa-arrow-up"></i> Live Traffic</span>
+                    <div class="stat-icon icon-packets">
+                        <i class="fa-solid fa-network-wired"></i>
+                    </div>
+                    <div>
+                        <div class="stat-label">Total Packets Evaluated</div>
+                        <div class="stat-value" id="statTotalPackets">77</div>
+                        <div class="stat-foot" id="statPacketBytes">5,738 Bytes parsed</div>
+                    </div>
                 </div>
+
                 <div class="stat-card">
-                    <span class="stat-title">Active Blocked Domains</span>
-                    <span class="stat-value" id="statBlockedCount" style="color: var(--danger);">4</span>
-                    <span class="stat-trend trend-down"><i class="fa-solid fa-shield"></i> Rules Applied</span>
+                    <div class="stat-icon icon-allowed">
+                        <i class="fa-solid fa-circle-check"></i>
+                    </div>
+                    <div>
+                        <div class="stat-label">Forwarded (Allowed)</div>
+                        <div class="stat-value" style="color: var(--success);" id="statForwarded">76</div>
+                        <div class="stat-foot" id="statForwardedPercent">98.7% Pass Rate</div>
+                    </div>
                 </div>
+
                 <div class="stat-card">
-                    <span class="stat-title">Forwarded Queries</span>
-                    <span class="stat-value" id="statForwarded" style="color: var(--success);">0</span>
-                    <span class="stat-trend trend-up" id="statForwardedPercent"><i class="fa-solid fa-check"></i> 0% Allowed</span>
+                    <div class="stat-icon icon-blocked">
+                        <i class="fa-solid fa-hand"></i>
+                    </div>
+                    <div>
+                        <div class="stat-label">Dropped (Blocked)</div>
+                        <div class="stat-value" style="color: var(--danger);" id="statDropped">1</div>
+                        <div class="stat-foot" id="statDroppedPercent">1.3% Block Rate</div>
+                    </div>
                 </div>
+
                 <div class="stat-card">
-                    <span class="stat-title">Avg DNS Resolution Time</span>
-                    <span class="stat-value" id="statAvgTime">1.4 ms</span>
-                    <span class="stat-trend trend-up"><i class="fa-solid fa-bolt"></i> Ultra Fast</span>
+                    <div class="stat-icon icon-rules">
+                        <i class="fa-solid fa-filter"></i>
+                    </div>
+                    <div>
+                        <div class="stat-label">Active Rules</div>
+                        <div class="stat-value" style="color: var(--accent-cyan);" id="statActiveRules">4</div>
+                        <div class="stat-foot" id="statRulesFoot">Domains & IPs</div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Two-Column Grid for Rules Manager & DNS Simulator -->
-            <div class="grid-container">
-                
-                <!-- Left: Domain Blocking Rules Manager -->
+            <!-- Engine Terminal Output Panel (Collapsible) -->
+            <div class="card grid-full" id="terminalCard" style="display: none;">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <i class="fa-solid fa-terminal"></i> C++ DPI Engine Execution Console Output
+                    </h2>
+                    <button id="btnCloseTerminal" class="btn-sm btn-outline">
+                        <i class="fa-solid fa-xmark"></i> Close Console
+                    </button>
+                </div>
+                <pre class="console-box" id="dpiStdoutConsole">Executing DPI Engine binary...</pre>
+            </div>
+
+            <!-- Grid Row 1: Firewall Rules + DNS Query Tester -->
+            <div class="grid-2col">
+
+                <!-- Firewall Domain & IP Rule Manager -->
                 <div class="card">
                     <div class="card-header">
                         <div>
                             <h2 class="card-title">
-                                <i class="fa-solid fa-ban"></i> Domain Firewall Rule Manager
+                                <i class="fa-solid fa-shield-cat"></i> Firewall Rule Manager
                             </h2>
-                            <p class="card-subtitle">Add or remove domain names to block in real-time</p>
+                            <p class="card-subtitle">Enforce L7 Domain (SNI) & L3 IP Blocking in real-time</p>
                         </div>
+                        <button id="btnResetRules" class="btn-sm btn-outline">
+                            <i class="fa-solid fa-rotate-left"></i> Reset Defaults
+                        </button>
                     </div>
 
                     <form id="addRuleForm" class="input-group">
-                        <input type="text" 
-                               id="domainInput" 
-                               class="input-field" 
-                               placeholder="e.g. youtube.com, facebook.com" 
-                               required 
-                               autocomplete="off">
-                        <button type="submit" class="btn btn-danger">
-                            <i class="fa-solid fa-plus"></i> Block Domain
+                        <input type="text" id="domainInput" class="form-input" placeholder="e.g. instagram.com or 192.168.1.50" required>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fa-solid fa-plus"></i> Add Rule
                         </button>
                     </form>
 
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
-                        <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-heading);">
-                            Currently Blocked Domains:
-                        </span>
-                        <button id="resetRulesBtn" class="btn btn-outline" style="padding: 0.3rem 0.75rem; font-size: 0.8rem;">
-                            <i class="fa-solid fa-rotate-left"></i> Reset Rules
-                        </button>
+                    <!-- Quick Preset Badges -->
+                    <div class="presets-bar">
+                        <span class="preset-label">Quick Add:</span>
+                        <button type="button" class="preset-btn" data-rule="youtube.com">youtube.com</button>
+                        <button type="button" class="preset-btn" data-rule="facebook.com">facebook.com</button>
+                        <button type="button" class="preset-btn" data-rule="tiktok.com">tiktok.com</button>
+                        <button type="button" class="preset-btn" data-rule="malicious-site.org">malicious-site.org</button>
                     </div>
 
-                    <div class="rules-list" id="rulesList">
-                        <!-- Rule Chips populated dynamically -->
+                    <div style="margin-top: 1rem;">
+                        <h4 style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.6rem;">
+                            Currently Blocked Targets:
+                        </h4>
+                        <div id="rulesList" class="rules-container">
+                            <!-- Populated dynamically -->
+                        </div>
                     </div>
                 </div>
 
-                <!-- Right: Interactive DNS Request Simulator -->
+                <!-- Interactive DNS Query Simulator -->
                 <div class="card">
                     <div class="card-header">
                         <div>
                             <h2 class="card-title">
-                                <i class="fa-solid fa-paper-plane"></i> Interactive DNS Query Tester
+                                <i class="fa-solid fa-magnifying-glass-location"></i> Live DNS Firewall Tester
                             </h2>
-                            <p class="card-subtitle">Test a domain request to see if DNS resolves or gets rejected by DPI</p>
+                            <p class="card-subtitle">Test how client DNS lookups are evaluated against active DPI rules</p>
                         </div>
                     </div>
 
                     <form id="testDnsForm" class="input-group">
-                        <input type="text" 
-                               id="testDomainInput" 
-                               class="input-field" 
-                               placeholder="Enter domain (e.g. google.com, youtube.com)" 
-                               required 
-                               autocomplete="off">
-                        <button type="submit" class="btn">
-                            <i class="fa-solid fa-magnifying-glass"></i> Send DNS Query
+                        <input type="text" id="testDomainInput" class="form-input" placeholder="Enter domain (e.g. google.com or youtube.com)" required>
+                        <button type="submit" class="btn btn-accent">
+                            <i class="fa-solid fa-bolt"></i> Query DNS
                         </button>
                     </form>
 
-                    <!-- DNS Result Card Output -->
-                    <div class="dns-result-box" id="dnsResultBox">
-                        <div class="dns-header">
-                            <span class="dns-domain" id="resDomain">Target: None</span>
-                            <span class="result-badge badge-allowed" id="resBadge">Ready to Test</span>
-                        </div>
-
-                        <div class="dns-details">
-                            <div class="detail-item">
-                                <span>Resolved IP:</span>
-                                <strong id="resIP">0.0.0.0</strong>
-                            </div>
-                            <div class="detail-item">
-                                <span>DPI Status:</span>
-                                <strong id="resAction">Pending</strong>
-                            </div>
-                            <div class="detail-item">
-                                <span>Latency:</span>
-                                <strong id="resLatency">-- ms</strong>
-                            </div>
-                        </div>
-
-                        <p id="resMessage" style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.4;">
-                            Enter a domain above to test real-time DNS resolution and deep packet filtering.
-                        </p>
+                    <div class="test-quick-links">
+                        <span class="preset-label">Test Samples:</span>
+                        <a href="#" class="dns-sample-link" data-domain="google.com">google.com</a>
+                        <a href="#" class="dns-sample-link" data-domain="youtube.com">youtube.com</a>
+                        <a href="#" class="dns-sample-link" data-domain="github.com">github.com</a>
+                        <a href="#" class="dns-sample-link" data-domain="tiktok.com">tiktok.com</a>
+                        <a href="#" class="dns-sample-link" data-domain="cricket.com">cricket.com</a>
                     </div>
 
+                    <div id="dnsResultCard" class="dns-result-box empty">
+                        <div style="text-align: center; color: var(--text-muted); padding: 1.5rem 0;">
+                            <i class="fa-solid fa-globe" style="font-size: 2rem; margin-bottom: 0.5rem; opacity: 0.4;"></i>
+                            <p>Enter a domain above to test DNS Firewall response</p>
+                        </div>
+                    </div>
                 </div>
-
             </div>
 
-            <!-- Multi-Threaded Load Balancer & Worker Thread Dispatcher -->
-            <div class="card grid-full" style="margin-top: 0.5rem;">
-                <div class="card-header">
-                    <div>
-                        <h2 class="card-title">
-                            <i class="fa-solid fa-microchip"></i> Multi-Threaded Packet Routing & Load Balancing (5-Tuple Hashing)
-                        </h2>
-                        <p class="card-subtitle">Shows real-time flow hashing: 5-Tuple ➔ Load Balancer Thread ➔ Fast Path Worker Thread</p>
+            <!-- Grid Row 2: Multi-Threaded Load Visualizer & Application Breakdown -->
+            <div class="grid-2col" style="margin-top: 1.5rem;">
+
+                <!-- Worker Thread Dispatch & Hash Inspector -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2 class="card-title">
+                                <i class="fa-solid fa-server"></i> Multi-Thread Worker Workload
+                            </h2>
+                            <p class="card-subtitle">2 Load Balancers & 4 Fast Path Worker Threads</p>
+                        </div>
+                    </div>
+
+                    <div class="thread-progress-grid">
+                        <div class="thread-item">
+                            <div class="thread-info">
+                                <span><i class="fa-solid fa-microchip"></i> FP0 (Worker #1)</span>
+                                <strong id="fp0Count">49 pkts</strong>
+                            </div>
+                            <div class="progress-track"><div class="progress-fill fill-cyan" id="fp0Bar" style="width: 100%;"></div></div>
+                        </div>
+
+                        <div class="thread-item">
+                            <div class="thread-info">
+                                <span><i class="fa-solid fa-microchip"></i> FP1 (Worker #2)</span>
+                                <strong id="fp1Count">0 pkts</strong>
+                            </div>
+                            <div class="progress-track"><div class="progress-fill fill-purple" id="fp1Bar" style="width: 0%;"></div></div>
+                        </div>
+
+                        <div class="thread-item">
+                            <div class="thread-info">
+                                <span><i class="fa-solid fa-microchip"></i> FP2 (Worker #3)</span>
+                                <strong id="fp2Count">0 pkts</strong>
+                            </div>
+                            <div class="progress-track"><div class="progress-fill fill-amber" id="fp2Bar" style="width: 0%;"></div></div>
+                        </div>
+
+                        <div class="thread-item">
+                            <div class="thread-info">
+                                <span><i class="fa-solid fa-microchip"></i> FP3 (Worker #4)</span>
+                                <strong id="fp3Count">28 pkts</strong>
+                            </div>
+                            <div class="progress-track"><div class="progress-fill fill-rose" id="fp3Bar" style="width: 57%;"></div></div>
+                        </div>
+                    </div>
+
+                    <!-- 5-Tuple Routing Inspector -->
+                    <div class="routing-box">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.6rem;">
+                            <span style="font-weight:700; color:var(--primary); font-size: 0.9rem;">
+                                <i class="fa-solid fa-route"></i> 5-Tuple Thread Dispatcher Inspector:
+                            </span>
+                            <span id="routePacketId" style="color:var(--text-muted); font-size:0.8rem;">Packet ID: #77</span>
+                        </div>
+
+                        <div class="routing-step">
+                            <span style="color:var(--text-muted); min-width:110px;">5-Tuple Flow:</span>
+                            <code id="routeTuple" style="color:var(--text-main); word-break: break-all;">192.168.1.100:54321 ➔ 142.250.190.46:443 (TCP)</code>
+                        </div>
+
+                        <div class="routing-details-grid">
+                            <div class="routing-step">
+                                <span style="color:var(--text-muted);">5-Tuple Hash:</span>
+                                <strong id="routeHash" style="color:var(--primary);">0x7F4A21B9</strong>
+                            </div>
+                            <div class="routing-step">
+                                <span style="color:var(--text-muted);">Assigned LB:</span>
+                                <span id="routeLB" class="badge-lb">LB0 (Thread #1)</span>
+                            </div>
+                            <div class="routing-step">
+                                <span style="color:var(--text-muted);">Assigned FP:</span>
+                                <span id="routeFP" class="badge-fp">FP0 (Worker #1)</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Live Worker Load Distribution Cards -->
-                <div class="thread-grid">
-                    <div class="worker-card">
-                        <div class="worker-header">
-                            <span>Fast Path Worker 0</span>
-                            <span class="badge-fp">FP0</span>
+                <!-- Application Layer Traffic Breakdown Chart -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2 class="card-title">
+                                <i class="fa-solid fa-chart-donut"></i> Application Protocol Distribution
+                            </h2>
+                            <p class="card-subtitle">Layer 7 protocol identification extracted from PCAP payloads</p>
                         </div>
-                        <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-muted);">
-                            <span>Assigned via LB0</span>
-                            <strong id="fp0Count">0 pkts</strong>
-                        </div>
-                        <div class="progress-track"><div class="progress-fill" id="fp0Bar"></div></div>
                     </div>
 
-                    <div class="worker-card">
-                        <div class="worker-header">
-                            <span>Fast Path Worker 1</span>
-                            <span class="badge-fp">FP1</span>
-                        </div>
-                        <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-muted);">
-                            <span>Assigned via LB0</span>
-                            <strong id="fp1Count">0 pkts</strong>
-                        </div>
-                        <div class="progress-track"><div class="progress-fill" id="fp1Bar"></div></div>
-                    </div>
-
-                    <div class="worker-card">
-                        <div class="worker-header">
-                            <span>Fast Path Worker 2</span>
-                            <span class="badge-fp">FP2</span>
-                        </div>
-                        <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-muted);">
-                            <span>Assigned via LB1</span>
-                            <strong id="fp2Count">0 pkts</strong>
-                        </div>
-                        <div class="progress-track"><div class="progress-fill" id="fp2Bar"></div></div>
-                    </div>
-
-                    <div class="worker-card">
-                        <div class="worker-header">
-                            <span>Fast Path Worker 3</span>
-                            <span class="badge-fp">FP3</span>
-                        </div>
-                        <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-muted);">
-                            <span>Assigned via LB1</span>
-                            <strong id="fp3Count">0 pkts</strong>
-                        </div>
-                        <div class="progress-track"><div class="progress-fill" id="fp3Bar"></div></div>
-                    </div>
-                </div>
-
-                <!-- Latest Packet 5-Tuple Hashing Inspection Box -->
-                <div class="routing-box">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span style="font-weight:700; color:var(--primary);">
-                            <i class="fa-solid fa-route"></i> Latest Packet Thread Dispatch Inspector:
-                        </span>
-                        <span id="routePacketId" style="color:var(--text-muted); font-size:0.8rem;">Packet ID: None</span>
-                    </div>
-
-                    <div class="routing-step">
-                        <span style="color:var(--text-muted); width:120px;">5-Tuple Flow:</span>
-                        <code id="routeTuple" style="color:var(--text-main); flex:1;">192.168.1.100:54321 ➔ 142.250.190.46:443 (TCP)</code>
-                    </div>
-
-                    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:0.75rem;">
-                        <div class="routing-step">
-                            <span style="color:var(--text-muted);">5-Tuple Hash:</span>
-                            <strong id="routeHash" style="color:var(--primary);">0x00000000</strong>
-                        </div>
-                        <div class="routing-step">
-                            <span style="color:var(--text-muted);">Target LB:</span>
-                            <span id="routeLB" class="badge-lb">LB0 (Thread #1)</span>
-                        </div>
-                        <div class="routing-step">
-                            <span style="color:var(--text-muted);">Assigned FP Worker:</span>
-                            <span id="routeFP" class="badge-fp">FP0 (Worker #1)</span>
-                        </div>
+                    <div class="chart-container">
+                        <canvas id="appChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -271,12 +311,12 @@
                 <div class="card-header">
                     <div>
                         <h2 class="card-title">
-                            <i class="fa-solid fa-stream"></i> Real-Time DPI Packet Processing Feed
+                            <i class="fa-solid fa-stream"></i> Real-Time DPI Packet Feed
                         </h2>
-                        <p class="card-subtitle">Showing live Ethernet, IP, Transport, and Application Layer SNI / Host extraction</p>
+                        <p class="card-subtitle">Inspecting Ethernet, IPv4, TCP/UDP headers, and TLS SNI / HTTP Host payloads</p>
                     </div>
                     <div style="display: flex; gap: 0.75rem;">
-                        <button id="btnSimulateStream" class="btn">
+                        <button id="btnSimulateStream" class="btn btn-primary">
                             <i class="fa-solid fa-play"></i> Simulate Traffic Stream
                         </button>
                         <button id="btnClearStream" class="btn btn-outline">
@@ -289,16 +329,16 @@
                     <table>
                         <thead>
                             <tr>
-                                <th>Packet ID</th>
+                                <th>Pkt ID</th>
                                 <th>5-Tuple (Src ➔ Dst)</th>
-                                <th>Assigned Thread Routing</th>
+                                <th>Thread Dispatch</th>
                                 <th>SNI / Host Header</th>
                                 <th>App Type</th>
                                 <th>DPI Action</th>
                             </tr>
                         </thead>
                         <tbody id="packetTableBody">
-                            <!-- Dynamically populated rows -->
+                            <!-- Populated dynamically -->
                         </tbody>
                     </table>
                 </div>
@@ -311,62 +351,67 @@
                 <div class="card-header">
                     <div>
                         <h2 class="card-title">
-                            <i class="fa-solid fa-diagram-project"></i> Deep Packet Inspection Pipeline Architecture
+                            <i class="fa-solid fa-diagram-project"></i> Deep Packet Inspection Architecture
                         </h2>
-                        <p class="card-subtitle">Understand how your C++ multi-threaded engine inspects and filters network traffic</p>
+                        <p class="card-subtitle">How multi-threaded packet parsing, hashing, SNI extraction, and firewall blocking work</p>
                     </div>
                 </div>
 
                 <!-- Animated Architecture Diagram -->
                 <div class="arch-diagram">
                     <div class="arch-node">
-                        <div class="node-title"><i class="fa-solid fa-desktop"></i> Client Request</div>
-                        <div class="node-desc">Browser makes DNS query or HTTP/HTTPS request</div>
+                        <div class="node-icon"><i class="fa-solid fa-laptop"></i></div>
+                        <div class="node-title">Client Traffic</div>
+                        <div class="node-desc">HTTPS Client Hello with SNI domain</div>
                     </div>
                     
                     <div class="arch-arrow"><i class="fa-solid fa-chevron-right"></i></div>
                     
                     <div class="arch-node">
-                        <div class="node-title"><i class="fa-solid fa-arrows-split-up-and-left"></i> Load Balancers</div>
-                        <div class="node-desc">2 LB threads hash 5-tuple to distribute flows</div>
+                        <div class="node-icon"><i class="fa-solid fa-arrows-split-up-and-left"></i></div>
+                        <div class="node-title">Load Balancers</div>
+                        <div class="node-desc">Hashes 5-tuple to balance worker queues</div>
                     </div>
                     
                     <div class="arch-arrow"><i class="fa-solid fa-chevron-right"></i></div>
                     
                     <div class="arch-node">
-                        <div class="node-title"><i class="fa-solid fa-microchip"></i> Fast Path Workers</div>
-                        <div class="node-desc">4 FP threads parse headers & extract TLS SNI / Host</div>
+                        <div class="node-icon"><i class="fa-solid fa-microchip"></i></div>
+                        <div class="node-title">Fast Path Workers</div>
+                        <div class="node-desc">Parses L2-L7 headers & extracts SNI</div>
                     </div>
                     
                     <div class="arch-arrow"><i class="fa-solid fa-chevron-right"></i></div>
                     
                     <div class="arch-node">
-                        <div class="node-title"><i class="fa-solid fa-gavel"></i> Rule Matcher</div>
-                        <div class="node-desc">Matches domain/IP against Firewall Rules</div>
+                        <div class="node-icon"><i class="fa-solid fa-gavel"></i></div>
+                        <div class="node-title">Firewall Engine</div>
+                        <div class="node-desc">Matches domain & IP against rules</div>
                     </div>
                     
                     <div class="arch-arrow"><i class="fa-solid fa-chevron-right"></i></div>
                     
                     <div class="arch-node">
-                        <div class="node-title"><i class="fa-solid fa-file-export"></i> Output Writer</div>
-                        <div class="node-desc">FORWARD packet to network or DROP blocked traffic</div>
+                        <div class="node-icon"><i class="fa-solid fa-file-export"></i></div>
+                        <div class="node-title">Filtered PCAP</div>
+                        <div class="node-desc">FORWARD packet or DROP blocked flow</div>
                     </div>
                 </div>
 
                 <!-- Educational Explanations Grid -->
-                <div class="grid-container" style="margin-top: 1.5rem;">
+                <div class="grid-2col" style="margin-top: 1.5rem;">
                     <div class="card">
-                        <h3 class="card-title" style="font-size: 1rem;"><i class="fa-solid fa-key"></i> What is 5-Tuple Hashing?</h3>
-                        <p style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.6;">
-                            A 5-Tuple consists of <code>(Src IP, Dst IP, Src Port, Dst Port, Protocol)</code>. 
-                            Your C++ engine computes a hash of this tuple so that all packets belonging to the exact same connection are consistently routed to the same worker thread.
+                        <h3 class="card-title" style="font-size: 1.05rem;"><i class="fa-solid fa-key" style="color:var(--primary);"></i> What is 5-Tuple Hashing?</h3>
+                        <p style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.6; margin-top: 0.5rem;">
+                            A 5-Tuple consists of <code>(Source IP, Destination IP, Source Port, Destination Port, Protocol)</code>. 
+                            The C++ DPI Engine calculates a hash of these 5 values so that all packets belonging to the exact same TCP/UDP connection are consistently dispatched to the exact same Fast Path worker thread, preserving state without locking mutexes!
                         </p>
                     </div>
 
                     <div class="card">
-                        <h3 class="card-title" style="font-size: 1rem;"><i class="fa-solid fa-lock"></i> How SNI Extraction Works</h3>
-                        <p style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.6;">
-                            Even when HTTPS encrypts packet payload, the <strong>TLS Client Hello</strong> packet transmits the target domain name in plaintext via the <em>Server Name Indication (SNI)</em> extension. Your DPI engine inspects this header to detect blocked domains before encryption starts!
+                        <h3 class="card-title" style="font-size: 1.05rem;"><i class="fa-solid fa-lock" style="color:var(--accent-cyan);"></i> How SNI Extraction Works</h3>
+                        <p style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.6; margin-top: 0.5rem;">
+                            Even when HTTPS encrypts web traffic, the initial <strong>TLS Client Hello</strong> handshake transmits the server hostname in <em>plaintext</em> inside the Server Name Indication (SNI) extension. The DPI engine inspects this header before encryption occurs, enabling precise domain filtering without needing SSL decryption keys!
                         </p>
                     </div>
                 </div>
@@ -376,7 +421,7 @@
 
     </div>
 
-    <!-- Application JavaScript -->
+    <!-- Application JS Script -->
     <script src="app.js"></script>
 </body>
 </html>
